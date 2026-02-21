@@ -8,6 +8,7 @@ import {
   saveCommentToFirebase,
   updateLikeInFirebase,
   pollComments,
+  fetchUserStatsFromFirebase,
 } from '../../../services/firebase';
 
 const COMMENTS_KEY = 'animeplay_comments';
@@ -75,21 +76,103 @@ const Avatar = ({ user, size = 7 }) => {
 };
 
 // ── Modal profil user ──────────────────────────────────────────────────────
-const UserProfileModal = ({ userId, onClose }) => {
+// commentData berisi avatarFile & avatar langsung dari komentar (sudah tersimpan di Firebase)
+const UserProfileModal = ({ userId, onClose, commentData }) => {
   const [profile, setProfile] = useState(null);
   const [history, setHistory] = useState([]);
+  const [stats, setStats] = useState(null); // data dari Firebase
+  const [loading, setLoading] = useState(true);
+
   useEffect(() => {
-    const u = getStoredUsers().find(u => u.id === userId);
-    if (u) {
-      setProfile(u);
-      try { setHistory(JSON.parse(localStorage.getItem(`animeplay_history_${userId}`) || '[]').slice(0, 5)); } catch {}
-    }
+    const load = async () => {
+      setLoading(true);
+
+      // 1. Coba dari localStorage (perangkat sendiri / akun sendiri)
+      const localUser = getStoredUsers().find(u => u.id === userId);
+      if (localUser) {
+        setProfile(localUser);
+        try {
+          const h = JSON.parse(localStorage.getItem(`animeplay_history_${userId}`) || '[]');
+          setHistory(h.slice(0, 5));
+          const bk = JSON.parse(localStorage.getItem(`animeplay_bookmarks_${userId}`) || '[]');
+          setStats({ xp: localUser.xp || 0, bookmarkCount: bk.length, historyCount: h.length });
+        } catch {}
+      }
+
+      // 2. Ambil dari Firebase untuk data terkini (termasuk profil orang lain)
+      if (isFirebaseConfigured()) {
+        const remote = await fetchUserStatsFromFirebase(userId);
+        if (remote) {
+          // Merge: Firebase adalah sumber kebenaran untuk stats
+          setStats({
+            xp: remote.xp || 0,
+            bookmarkCount: remote.bookmarkCount || 0,
+            historyCount: remote.historyCount || 0,
+          });
+          if (remote.recentHistory?.length) setHistory(remote.recentHistory.slice(0, 5));
+          // Jika tidak ada di localStorage (profil orang lain), set dari Firebase
+          if (!localUser) {
+            setProfile({
+              username: remote.username || commentData?.name || 'User',
+              role: remote.role || commentData?.role || 'user',
+              xp: remote.xp || 0,
+              avatar: remote.avatar || commentData?.avatar || null,
+              avatarIsFile: remote.avatarIsFile || !!commentData?.avatarFile,
+              avatarFile: commentData?.avatarFile || null,
+              customBadge: remote.customBadge || null,
+            });
+          } else {
+            // Update xp dari Firebase untuk akurasi
+            setProfile(p => ({ ...p, xp: remote.xp ?? p?.xp ?? 0, customBadge: remote.customBadge ?? p?.customBadge }));
+          }
+        } else if (!localUser && commentData) {
+          // Firebase belum dikonfigurasi / user belum sync — fallback ke commentData
+          setProfile({
+            username: commentData.name,
+            role: commentData.role || 'user',
+            xp: 0,
+            avatar: commentData.avatar,
+            avatarIsFile: !!commentData.avatarFile,
+            avatarFile: commentData.avatarFile,
+          });
+        }
+      } else if (!localUser && commentData) {
+        setProfile({
+          username: commentData.name,
+          role: commentData.role || 'user',
+          xp: 0,
+          avatar: commentData.avatar,
+          avatarIsFile: !!commentData.avatarFile,
+          avatarFile: commentData.avatarFile,
+        });
+      }
+
+      setLoading(false);
+    };
+    load();
   }, [userId]);
-  if (!profile) return null;
-  const levelData = getLevelInfo(profile.xp || 0).current;
+
+  if (!profile && !loading) return null;
+  if (!profile) return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center px-4"
+      style={{ background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(8px)' }} onClick={onClose}>
+      <div className="p-6 rounded-3xl" style={{ background: 'var(--surface)' }}>
+        <p className="text-xs text-white animate-pulse">Memuat profil...</p>
+      </div>
+    </div>
+  );
+
+  const xpToShow = stats?.xp ?? profile.xp ?? 0;
+  const levelData = getLevelInfo(xpToShow).current;
   const roleInfo = ROLES[profile.role || 'user'] || ROLES.user;
-  let bookmarks = [];
-  try { bookmarks = JSON.parse(localStorage.getItem(`animeplay_bookmarks_${userId}`) || '[]'); } catch {}
+  // Untuk tampilan stats, gunakan data Firebase jika ada, fallback localStorage
+  const bookmarkCount = stats?.bookmarkCount ?? 0;
+  const historyCount = stats?.historyCount ?? history.length;
+
+  // Foto profil: prioritaskan avatarFile dari komentar, lalu profile.avatar jika avatarIsFile
+  const photoSrc = commentData?.avatarFile || profile.avatarFile || (profile.avatarIsFile ? profile.avatar : null);
+  const emojiAvatar = !photoSrc ? (commentData?.avatar || (!profile.avatarIsFile ? profile.avatar : null)) : null;
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center px-4"
       style={{ background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(8px)' }} onClick={onClose}>
@@ -100,10 +183,10 @@ const UserProfileModal = ({ userId, onClose }) => {
         </div>
         <div className="flex items-center gap-4 mb-4">
           <div className="w-16 h-16 rounded-2xl overflow-hidden flex-shrink-0" style={{ background: levelData.gradient }}>
-            {profile.avatarIsFile && profile.avatar
-              ? <img src={profile.avatar} className="w-full h-full object-cover" alt="" />
-              : profile.avatar
-              ? <div className="w-full h-full flex items-center justify-center text-3xl">{profile.avatar}</div>
+            {photoSrc
+              ? <img src={photoSrc} className="w-full h-full object-cover" alt="" />
+              : emojiAvatar
+              ? <div className="w-full h-full flex items-center justify-center text-3xl">{emojiAvatar}</div>
               : <div className="w-full h-full flex items-center justify-center text-2xl font-black text-white">{profile.username?.charAt(0)?.toUpperCase() || '?'}</div>
             }
           </div>
@@ -112,14 +195,28 @@ const UserProfileModal = ({ userId, onClose }) => {
             <div className="flex flex-wrap gap-1.5 mt-1">
               <span className={`level-badge ${roleInfo.className} text-[10px]`}>{roleInfo.icon} {roleInfo.label}</span>
               <span className="level-badge text-[10px]" style={{ background: levelData.gradient, color: 'white' }}>Lv.{levelData.level} {levelData.name}</span>
+              {profile.customBadge && (() => {
+                const BADGES = [
+                  {id:'early',label:'Early Bird',icon:'🐣',color:'#fac96d',bg:'rgba(250,201,109,0.15)'},
+                  {id:'og',label:'OG Member',icon:'🏅',color:'#ffd700',bg:'rgba(255,215,0,0.15)'},
+                  {id:'verified',label:'Verified',icon:'✅',color:'#6dfabc',bg:'rgba(109,250,188,0.15)'},
+                  {id:'otaku',label:'True Otaku',icon:'🎌',color:'#7c6dfa',bg:'rgba(124,109,250,0.15)'},
+                  {id:'legend',label:'Legend',icon:'⚡',color:'#fa6d9a',bg:'rgba(250,109,154,0.15)'},
+                  {id:'creator',label:'Creator',icon:'🎨',color:'#f59e0b',bg:'rgba(245,158,11,0.15)'},
+                  {id:'tester',label:'Beta Tester',icon:'🧪',color:'#06b6d4',bg:'rgba(6,182,212,0.15)'},
+                  {id:'supporter',label:'Supporter',icon:'💎',color:'#a855f7',bg:'rgba(168,85,247,0.15)'},
+                ];
+                const b = BADGES.find(b => b.id === profile.customBadge);
+                return b ? <span className="level-badge text-[10px]" style={{background:b.bg,color:b.color}}>{b.icon} {b.label}</span> : null;
+              })()}
             </div>
           </div>
         </div>
         <div className="grid grid-cols-3 gap-2 mb-4">
           {[
-            { label: 'Total XP', value: (profile.xp || 0).toLocaleString(), color: '#7c6dfa' },
-            { label: 'My List', value: bookmarks.length, color: '#fa6d9a' },
-            { label: 'Ditonton', value: history.length, color: '#fac96d' },
+            { label: 'Total XP', value: xpToShow.toLocaleString(), color: '#7c6dfa' },
+            { label: 'My List', value: bookmarkCount, color: '#fa6d9a' },
+            { label: 'Ditonton', value: historyCount, color: '#fac96d' },
           ].map(s => (
             <div key={s.label} className="p-2 rounded-xl text-center" style={{ background: 'var(--card)' }}>
               <p className="text-sm font-black" style={{ color: s.color }}>{s.value}</p>
@@ -159,7 +256,7 @@ const CommentItem = ({ c, user, allComments, onLike, onReply, depth = 0 }) => {
   const avatarUser = { avatarFile: c.avatarFile || null, avatar: c.avatar || null, avatarIsFile: !!c.avatarFile, name: c.name, role: c.role };
   return (
     <>
-      {showProfile && c.userId && <UserProfileModal userId={c.userId} onClose={() => setShowProfile(false)} />}
+      {showProfile && c.userId && <UserProfileModal userId={c.userId} onClose={() => setShowProfile(false)} commentData={c} />}
       <div className={`flex gap-2.5 ${depth > 0 ? 'ml-8 mt-2' : 'mt-0'}`}>
         <button onClick={() => c.userId && setShowProfile(true)} className="flex-shrink-0 mt-0.5">
           <Avatar user={avatarUser} size={7} />
@@ -343,4 +440,3 @@ const StreamingAnimeCommentsSection = ({ episodeUrl }) => {
 };
 
 export default StreamingAnimeCommentsSection;
-        
