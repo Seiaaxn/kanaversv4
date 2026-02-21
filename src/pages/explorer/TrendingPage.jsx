@@ -106,4 +106,4 @@ const TrendingPage = ({ onAnimeSelect }) => {
 };
 
 export default TrendingPage;
-                    
+
