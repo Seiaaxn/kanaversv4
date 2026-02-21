@@ -48,8 +48,12 @@ const GenrePage = () => {
         ? `${API_BASE}/anime/genre/${genre.value}?page=${pageNum}`
         : `${API_BASE}/donghua/genre/${genre.value}?page=${pageNum}`;
       const res = await axios.get(endpoint);
-      const list = res.data?.anime || res.data?.data || res.data || [];
-      const arr = Array.isArray(list) ? list : [];
+      const raw = res.data;
+      const arr = Array.isArray(raw) ? raw
+        : Array.isArray(raw?.data) ? raw.data
+        : Array.isArray(raw?.anime) ? raw.anime
+        : Array.isArray(raw?.results) ? raw.results
+        : [];
       if (reset) setAnimeList(arr); else setAnimeList(prev=>[...prev,...arr]);
       setHasMore(arr.length >= 12);
     } catch(e) {
@@ -66,8 +70,12 @@ const GenrePage = () => {
         ? `${API_BASE}/anime/latest?page=${pageNum}`
         : `${API_BASE}/donghua/latest?page=${pageNum}`;
       const res = await axios.get(endpoint);
-      const list = res.data?.data || res.data || [];
-      const arr = Array.isArray(list) ? list : [];
+      const raw2 = res.data;
+      const arr = Array.isArray(raw2) ? raw2
+        : Array.isArray(raw2?.data) ? raw2.data
+        : Array.isArray(raw2?.anime) ? raw2.anime
+        : Array.isArray(raw2?.results) ? raw2.results
+        : [];
       if (pageNum===1) setAnimeList(arr); else setAnimeList(prev=>[...prev,...arr]);
       setHasMore(arr.length >= 12);
     } catch { setAnimeList([]); setHasMore(false); }
@@ -186,3 +194,4 @@ const GenrePage = () => {
 };
 
 export default GenrePage;
+      
