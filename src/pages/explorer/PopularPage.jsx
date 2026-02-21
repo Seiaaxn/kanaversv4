@@ -15,7 +15,7 @@ const PopularPage = ({ onAnimeSelect }) => {
             try {
                 const res = await axios.get(`${API_BASE}/latest`);
                 // Sort by some popularity metric or just shuffle for now
-                const sorted = res.data.data?.sort(() => 0.5 - Math.random()) || [];
+                const sorted = (Array.isArray(res.data) ? res.data : Array.isArray(res.data?.data) ? res.data.data : []).sort(() => 0.5 - Math.random());
                 setAnime(sorted);
             } catch (error) {
                 console.error('Error:', error);
