@@ -14,7 +14,7 @@ const TrendingPage = ({ onAnimeSelect }) => {
             try {
                 // Using shuffle endpoint for trending effect
                 const res = await axios.get(`${API_BASE}/latest/shuffle`);
-                setTrending(res.data.data || []);
+                setTrending(Array.isArray(res.data) ? res.data : Array.isArray(res.data?.data) ? res.data.data : []);
             } catch (error) {
                 console.error('Error:', error);
             } finally {
@@ -106,3 +106,4 @@ const TrendingPage = ({ onAnimeSelect }) => {
 };
 
 export default TrendingPage;
+                    
