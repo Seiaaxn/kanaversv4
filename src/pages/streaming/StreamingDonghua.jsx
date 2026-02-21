@@ -1,5 +1,16 @@
 import StreamingDonghuaCommentsSection from '../../components/streaming/donghua/StreamingDonghuaCommentsSection';
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { addXP, getUser } from '../../utils/userSystem';
+import { syncUserNow } from '../../services/firebase';
+
+const showXPToast = (amount, extra = '') => {
+    const toast = document.createElement('div');
+    toast.className = 'xp-toast';
+    toast.textContent = `⚡ +${amount} XP${extra}`;
+    document.body.appendChild(toast);
+    setTimeout(() => toast.classList.add('show'), 100);
+    setTimeout(() => { toast.classList.remove('show'); setTimeout(() => toast.remove(), 300); }, 2800);
+};
 import { useNavigate, useLocation } from 'react-router-dom';
 import axios from 'axios';
 
@@ -29,8 +40,28 @@ const StreamingDonghua = () => {
     const [isIframeLoading, setIsIframeLoading] = useState(false);
 
     const iframeRef = useRef(null);
+    const xpTimerRef = useRef(null);
+
+    const startWatchTimer = useCallback(() => {
+        if (!getUser()) return;
+        if (xpTimerRef.current) clearInterval(xpTimerRef.current);
+        xpTimerRef.current = setInterval(() => {
+            const result = addXP(100, 'Menonton donghua 20 menit');
+            if (result) {
+                showXPToast(100, result.leveledUp ? ` 🎉 Level ${result.newLevel}!` : ' (nonton 20 menit)');
+                syncUserNow();
+            }
+        }, 20 * 60 * 1000);
+    }, []);
+
+    const stopWatchTimer = useCallback(() => {
+        if (xpTimerRef.current) { clearInterval(xpTimerRef.current); xpTimerRef.current = null; }
+    }, []);
+
+    useEffect(() => { return () => stopWatchTimer(); }, [stopWatchTimer]);
 
     useEffect(() => {
+
         const fetchEpisodeDetail = async () => {
             if (!episodeUrl) {
                 setError('No episode URL provided');
@@ -64,12 +95,12 @@ const StreamingDonghua = () => {
         fetchEpisodeDetail();
     }, [episodeUrl]);
 
-    const handleBack = () => navigate(-1);
-    const handleServerChange = (server) => { setSelectedServer(server); setIsIframeLoading(true); };
+    const handleBack = () => { stopWatchTimer(); navigate(-1); };
+    const handleServerChange = (server) => { stopWatchTimer(); setSelectedServer(server); setIsIframeLoading(true); };
     const handleGoHome = () => navigate('/');
 
     const handleEpisodeClick = (ep) => {
-        if (ep?.url) navigate(`/donghua/watch?url=${encodeURIComponent(ep.url)}`);
+        if (ep?.url) { stopWatchTimer(); navigate(`/donghua/watch?url=${encodeURIComponent(ep.url)}`); }
     };
 
     if (loading) return <StreamingDonghuaLoadingState />;
@@ -92,7 +123,7 @@ const StreamingDonghua = () => {
                     ref={iframeRef}
                     selectedServer={selectedServer}
                     isLoading={isIframeLoading}
-                    onLoad={() => setIsIframeLoading(false)}
+                    onLoad={() => { setIsIframeLoading(false); startWatchTimer(); }}
                     onError={() => setIsIframeLoading(false)}
                 />
             </div>
@@ -123,4 +154,5 @@ const StreamingDonghua = () => {
 };
 
 export default StreamingDonghua;
-                  
+
+            
