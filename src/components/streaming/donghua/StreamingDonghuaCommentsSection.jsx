@@ -195,7 +195,8 @@ const UserProfileModal = ({ userId, onClose, commentData }) => {
             <div className="flex flex-wrap gap-1.5 mt-1">
               <span className={`level-badge ${roleInfo.className} text-[10px]`}>{roleInfo.icon} {roleInfo.label}</span>
               <span className="level-badge text-[10px]" style={{ background: levelData.gradient, color: 'white' }}>Lv.{levelData.level} {levelData.name}</span>
-              {profile.customBadge && (() => {
+              {(profile.customBadge || profile.customBadgeData) && (() => {
+                // Support badge preset maupun badge kustom buatan admin
                 const BADGES = [
                   {id:'early',label:'Early Bird',icon:'🐣',color:'#fac96d',bg:'rgba(250,201,109,0.15)'},
                   {id:'og',label:'OG Member',icon:'🏅',color:'#ffd700',bg:'rgba(255,215,0,0.15)'},
@@ -205,9 +206,14 @@ const UserProfileModal = ({ userId, onClose, commentData }) => {
                   {id:'creator',label:'Creator',icon:'🎨',color:'#f59e0b',bg:'rgba(245,158,11,0.15)'},
                   {id:'tester',label:'Beta Tester',icon:'🧪',color:'#06b6d4',bg:'rgba(6,182,212,0.15)'},
                   {id:'supporter',label:'Supporter',icon:'💎',color:'#a855f7',bg:'rgba(168,85,247,0.15)'},
+                  {id:'fire',label:'Hot',icon:'🔥',color:'#f97316',bg:'rgba(249,115,22,0.15)'},
+                  {id:'star',label:'Star',icon:'🌟',color:'#ffd700',bg:'rgba(255,215,0,0.12)'},
+                  {id:'champion',label:'Champion',icon:'🏆',color:'#00f0ff',bg:'rgba(0,240,255,0.12)'},
                 ];
-                const b = BADGES.find(b => b.id === profile.customBadge);
-                return b ? <span className="level-badge text-[10px]" style={{background:b.bg,color:b.color}}>{b.icon} {b.label}</span> : null;
+                const bd = profile.customBadgeData || BADGES.find(b => b.id === profile.customBadge);
+                return bd && bd.id ? (
+                  <span className="level-badge text-[10px]" style={{background:bd.bg,color:bd.color}}>{bd.icon} {bd.label}</span>
+                ) : null;
               })()}
             </div>
           </div>
@@ -246,7 +252,8 @@ const UserProfileModal = ({ userId, onClose, commentData }) => {
 };
 
 // ── Satu item komentar ─────────────────────────────────────────────────────
-const CommentItem = ({ c, user, allComments, onLike, onReply, depth = 0 }) => {
+const CommentItem = ({ c, user, allComments, onLike, onReply, onReplyRemove, activeReplies = [], depth = 0 }) => {
+  const replyActive = activeReplies.includes(c.id);
   const role = c.role || 'user';
   const roleInfo = ROLES[role] || ROLES.user;
   const isAdmin = role === 'admin';
@@ -269,22 +276,35 @@ const CommentItem = ({ c, user, allComments, onLike, onReply, depth = 0 }) => {
             {(isAdmin || isMod) && <span className={`level-badge ${roleInfo.className} text-[8px] py-0`}>{roleInfo.icon} {roleInfo.label}</span>}
             <span className="text-[9px]" style={{ color: 'var(--muted)' }}>{timeAgo(c.createdAt)}</span>
           </div>
-          {c.replyTo && <p className="text-[10px] mb-0.5" style={{ color: 'var(--muted)' }}>↩ {c.replyTo}</p>}
+          {c.replyTo && (
+            <p className="text-[10px] mb-0.5 flex flex-wrap gap-1" style={{ color: 'var(--muted)' }}>
+              ↩ {c.replyTo.split(', ').map((name, i) => (
+                <span key={i} className="font-semibold" style={{color:'#a78bfa'}}>@{name}</span>
+              ))}
+            </p>
+          )}
           <p className="text-xs leading-relaxed" style={{ color: 'var(--text,#ddd)' }}>{c.comment}</p>
           <div className="flex items-center gap-3 mt-1">
             <button onClick={() => onLike(c.id)}
               className={`flex items-center gap-1 text-[10px] transition-colors ${user && (c.likedBy || []).includes(user.id) ? 'text-primary-400' : 'text-gray-600 hover:text-gray-400'}`}>
               <ThumbsUp size={11} />{c.likes > 0 && c.likes}
             </button>
-            {depth === 0 && (
-              <button onClick={() => onReply(c)} className="flex items-center gap-1 text-[10px] text-gray-600 hover:text-gray-400 transition-colors">
+            {depth === 0 && !replyActive && (
+              <button onClick={() => onReply(c)}
+                className="flex items-center gap-1 text-[10px] text-gray-600 hover:text-primary-400 transition-colors">
                 <Reply size={11} />Reply
+              </button>
+            )}
+            {depth === 0 && replyActive && (
+              <button onClick={() => onReplyRemove(c.id)}
+                className="flex items-center gap-1 text-[10px] transition-colors" style={{color:'#7c6dfa'}}>
+                <Reply size={11} />Balas ✓ <X size={9}/>
               </button>
             )}
           </div>
         </div>
       </div>
-      {replies.map(r => <CommentItem key={r.id} c={r} user={user} allComments={allComments} onLike={onLike} onReply={onReply} depth={depth + 1} />)}
+      {replies.map(r => <CommentItem key={r.id} c={r} user={user} allComments={allComments} onLike={onLike} onReply={onReply} onReplyRemove={onReplyRemove} activeReplies={activeReplies} depth={depth + 1} />)}
     </>
   );
 };
@@ -299,7 +319,8 @@ const StreamingAnimeCommentsSection = ({ episodeUrl }) => {
   const [comments, setComments] = useState(() => loadLocal(episodeKey));
   const [newComment, setNewComment] = useState('');
   const [sortNewest, setSortNewest] = useState(true);
-  const [replyTo, setReplyTo] = useState(null);
+  const [replyTo, setReplyTo] = useState(null);       // satu aktif untuk input
+  const [replyToList, setReplyToList] = useState([]); // semua yang di-mention
   const [isOnline, setIsOnline] = useState(false);
   const [sending, setSending] = useState(false);
 
@@ -322,6 +343,10 @@ const StreamingAnimeCommentsSection = ({ episodeUrl }) => {
   const handleAdd = async () => {
     if (!newComment.trim() || !user || sending) return;
     setSending(true);
+    // Gabungkan semua mention @name di depan komentar
+    const mentions = replyToList.length > 0
+      ? replyToList.map(r => `@${r.name}`).join(' ') + ' '
+      : '';
     const comment = {
       id: Date.now(),
       name: user.username || 'User',
@@ -329,15 +354,16 @@ const StreamingAnimeCommentsSection = ({ episodeUrl }) => {
       role: user.role || 'user',
       avatar: !user.avatarIsFile ? user.avatar : null,
       avatarFile: user.avatarIsFile ? user.avatar : null,
-      comment: newComment.trim(),
+      comment: mentions + newComment.trim(),
       createdAt: new Date(),
       likes: 0, likedBy: [],
       parentId: replyTo?.id || null,
-      replyTo: replyTo?.name || null,
+      replyTo: replyToList.length > 0 ? replyToList.map(r => r.name).join(', ') : null,
+      mentions: replyToList.map(r => r.userId).filter(Boolean),
     };
     const updated = [comment, ...comments];
     setComments(updated); saveLocal(episodeKey, updated);
-    setNewComment(''); setReplyTo(null);
+    setNewComment(''); setReplyTo(null); setReplyToList([]);
     if (dbActive) { const ok = await saveCommentToFirebase(episodeKey, comment); if (!ok) setIsOnline(false); }
     setSending(false);
   };
@@ -389,11 +415,19 @@ const StreamingAnimeCommentsSection = ({ episodeUrl }) => {
       {/* Input komentar */}
       {user ? (
         <div className="mb-5">
-          {replyTo && (
-            <div className="flex items-center gap-2 mb-2 px-3 py-1.5 rounded-lg" style={{ background: 'rgba(124,109,250,0.1)' }}>
-              <CornerDownRight size={12} className="text-primary-400" />
-              <span className="text-xs text-gray-400">Balas <span className="text-primary-400 font-bold">{replyTo.name}</span></span>
-              <button onClick={() => setReplyTo(null)} className="ml-auto text-gray-500 hover:text-white"><X size={12} /></button>
+          {replyToList.length > 0 && (
+            <div className="flex flex-wrap items-center gap-1.5 mb-2 px-3 py-2 rounded-xl" style={{ background: 'rgba(124,109,250,0.08)', border: '1px solid rgba(124,109,250,0.15)' }}>
+              <CornerDownRight size={11} className="text-primary-400 flex-shrink-0" />
+              <span className="text-[10px] text-gray-400">Balas:</span>
+              {replyToList.map(r => (
+                <span key={r.id} className="flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold"
+                  style={{ background: 'rgba(124,109,250,0.2)', color: '#a78bfa' }}>
+                  @{r.name}
+                  <button onClick={() => { setReplyToList(prev => prev.filter(x => x.id !== r.id)); if (replyTo?.id === r.id) setReplyTo(null); }}
+                    className="hover:text-white ml-0.5"><X size={9}/></button>
+                </span>
+              ))}
+              <button onClick={() => { setReplyTo(null); setReplyToList([]); }} className="ml-auto text-[10px]" style={{color:'var(--muted)'}}>Hapus semua</button>
             </div>
           )}
           <div className="flex items-center gap-2.5">
@@ -401,7 +435,7 @@ const StreamingAnimeCommentsSection = ({ episodeUrl }) => {
             <div className="flex-1 flex items-center gap-2 bg-dark-card border border-white/8 rounded-xl px-3 py-2 focus-within:border-white/15 transition-colors">
               <input value={newComment} onChange={e => setNewComment(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && !e.shiftKey && handleAdd()}
-                placeholder={replyTo ? `Balas ${replyTo.name}...` : 'Tulis komentar...'}
+                placeholder={replyToList.length > 0 ? `Balas ${replyToList.map(r=>r.name).join(', ')}...` : 'Tulis komentar...'}
                 className="flex-1 bg-transparent text-sm text-white placeholder-gray-600 outline-none" />
               <button onClick={handleAdd} disabled={!newComment.trim() || sending}
                 className="p-1.5 rounded-lg bg-primary-400 text-black hover:bg-primary-300 transition-colors disabled:opacity-30 flex-shrink-0">
@@ -431,7 +465,15 @@ const StreamingAnimeCommentsSection = ({ episodeUrl }) => {
       ) : (
         <div className="space-y-4">
           {topLevel.map(c => (
-            <CommentItem key={c.id} c={c} user={user} allComments={comments} onLike={handleLike} onReply={(c) => setReplyTo({ id: c.id, name: c.name })} />
+            <CommentItem key={c.id} c={c} user={user} allComments={comments} onLike={handleLike} onReply={(c) => {
+              setReplyTo({ id: c.id, name: c.name });
+              setReplyToList(prev => prev.find(r => r.id === c.id) ? prev : [...prev, { id: c.id, name: c.name, userId: c.userId }]);
+            }}
+            onReplyRemove={(id) => {
+              setReplyToList(prev => prev.filter(r => r.id !== id));
+              if (replyTo?.id === id) setReplyTo(null);
+            }}
+            activeReplies={replyToList.map(r => r.id)} />
           ))}
         </div>
       )}
