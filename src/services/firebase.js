@@ -123,6 +123,7 @@ export const syncUserStatsToFirebase = async (userId, stats) => {
         avatar: stats.avatar || null,
         avatarIsFile: stats.avatarIsFile || false,
         customBadge: stats.customBadge || null,
+        customBadgeData: stats.customBadgeData || null,
         updatedAt: new Date().toISOString(),
       }),
     });
@@ -143,6 +144,115 @@ export const fetchUserStatsFromFirebase = async (userId) => {
   } catch (e) {
     console.warn('Firebase fetchUserStats error:', e);
     return null;
+  }
+};
+
+// ── Helper terpusat: panggil ini setelah XP / bookmark / history berubah ──
+export const syncUserNow = async () => {
+  if (!isFirebaseConfigured()) return;
+  try {
+    const AUTH_KEY = 'animeplay_auth';
+    const user = JSON.parse(localStorage.getItem(AUTH_KEY) || 'null');
+    if (!user?.id) return;
+    const history = JSON.parse(localStorage.getItem(`animeplay_history_${user.id}`) || '[]');
+    const bookmarks = JSON.parse(localStorage.getItem(`animeplay_bookmarks_${user.id}`) || '[]');
+    const stats = {
+      xp: user.xp || 0,
+      bookmarkCount: bookmarks.length,
+      historyCount: history.length,
+      recentHistory: history.slice(0, 5),
+      username: user.username || '',
+      role: user.role || 'user',
+      avatar: user.avatar || null,
+      avatarIsFile: user.avatarIsFile || false,
+      customBadge: user.customBadge || null,
+      customBadgeData: user.customBadgeData || null,
+    };
+    await syncUserStatsToFirebase(user.id, stats);
+    // Simpan ke leaderboard bulanan + all-time
+    const now = new Date();
+    const monthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    await saveToLeaderboard(user.id, stats, monthKey);
+  } catch (e) {
+    console.warn('syncUserNow error:', e);
+  }
+};
+
+// ── Leaderboard bulanan & all-time ────────────────────────────────────────
+
+// Simpan entry leaderboard (dipanggil dari syncUserNow)
+export const saveToLeaderboard = async (userId, stats, monthKey) => {
+  if (!isFirebaseConfigured() || !userId) return;
+  try {
+    const entry = {
+      userId,
+      username: stats.username || '',
+      xp: stats.xp || 0,
+      role: stats.role || 'user',
+      avatar: stats.avatar || null,
+      avatarIsFile: stats.avatarIsFile || false,
+      customBadge: stats.customBadge || null,
+      customBadgeData: stats.customBadgeData || null,
+      updatedAt: new Date().toISOString(),
+    };
+    // Simpan ke leaderboard bulan ini
+    await fetch(`${FIREBASE_DB_URL}/leaderboard/${monthKey}/${userId}.json`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(entry),
+    });
+    // Simpan ke leaderboard all-time
+    await fetch(`${FIREBASE_DB_URL}/leaderboard/alltime/${userId}.json`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(entry),
+    });
+  } catch (e) {
+    console.warn('saveToLeaderboard error:', e);
+  }
+};
+
+// Ambil leaderboard (monthKey = 'YYYY-MM' atau 'alltime')
+export const fetchLeaderboard = async (monthKey) => {
+  if (!isFirebaseConfigured()) return null;
+  try {
+    const res = await fetch(`${FIREBASE_DB_URL}/leaderboard/${monthKey}.json`);
+    if (!res.ok) return null;
+    return await res.json();
+  } catch (e) {
+    console.warn('fetchLeaderboard error:', e);
+    return null;
+  }
+};
+
+// ── Sync stats user spesifik (untuk admin yang ubah user lain) ────────────
+export const syncSpecificUser = async (userId) => {
+  if (!isFirebaseConfigured() || !userId) return;
+  try {
+    const USERS_KEY = 'animeplay_users';
+    const users = JSON.parse(localStorage.getItem(USERS_KEY) || '[]');
+    const user = users.find(u => u.id === userId);
+    if (!user) return;
+    const history = JSON.parse(localStorage.getItem(`animeplay_history_${userId}`) || '[]');
+    const bookmarks = JSON.parse(localStorage.getItem(`animeplay_bookmarks_${userId}`) || '[]');
+    const stats = {
+      xp: user.xp || 0,
+      bookmarkCount: bookmarks.length,
+      historyCount: history.length,
+      recentHistory: history.slice(0, 5),
+      username: user.username || '',
+      role: user.role || 'user',
+      avatar: user.avatar || null,
+      avatarIsFile: user.avatarIsFile || false,
+      customBadge: user.customBadge || null,
+      customBadgeData: user.customBadgeData || null,
+    };
+    await syncUserStatsToFirebase(userId, stats);
+    const now = new Date();
+    const monthKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    await saveToLeaderboard(userId, stats, monthKey);
+  } catch (e) {
+    console.warn('syncSpecificUser error:', e);
   }
 };
         
