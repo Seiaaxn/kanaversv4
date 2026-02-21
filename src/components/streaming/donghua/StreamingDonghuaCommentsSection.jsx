@@ -3,12 +3,12 @@ import { ThumbsUp, Send, ArrowUpDown, MessageCircle, Reply, X, CornerDownRight, 
 import { useNavigate } from 'react-router-dom';
 import { getLevelInfo, ROLES, getStoredUsers } from '../../../utils/userSystem';
 import {
-  isSupabaseConfigured,
-  fetchCommentsFromSupabase,
-  saveCommentToSupabase,
-  updateLikeInSupabase,
+  isFirebaseConfigured,
+  fetchCommentsFromFirebase,
+  saveCommentToFirebase,
+  updateLikeInFirebase,
   pollComments,
-} from '../../../services/supabase';
+} from '../../../services/firebase';
 
 const COMMENTS_KEY = 'animeplay_comments';
 const AUTH_KEY = 'animeplay_auth';
@@ -58,18 +58,14 @@ const Avatar = ({ user, size = 7 }) => {
   const bg = isAdmin ? 'linear-gradient(135deg,#7c6dfa,#fa6d9a)'
     : isMod ? 'linear-gradient(135deg,#6dfabc,#6daefa)'
     : 'rgba(124,109,250,0.18)';
-
   return (
     <div style={{ width: px, height: px, minWidth: px, background: bg }}
       className="rounded-full overflow-hidden flex items-center justify-center flex-shrink-0">
-      {/* Foto profil (base64) */}
       {(user?.avatarFile || (user?.avatarIsFile && user?.avatar)) ? (
         <img src={user.avatarFile || user.avatar} className="w-full h-full object-cover" alt="" />
       ) : user?.avatar && !user?.avatarIsFile ? (
-        /* Avatar emoji */
         <span style={{ fontSize: px * 0.46, lineHeight: 1 }}>{user.avatar}</span>
       ) : (
-        /* Inisial */
         <span className="font-bold text-white" style={{ fontSize: px * 0.38 }}>
           {((user?.name || user?.username || '?').charAt(0)).toUpperCase()}
         </span>
@@ -94,7 +90,6 @@ const UserProfileModal = ({ userId, onClose }) => {
   const roleInfo = ROLES[profile.role || 'user'] || ROLES.user;
   let bookmarks = [];
   try { bookmarks = JSON.parse(localStorage.getItem(`animeplay_bookmarks_${userId}`) || '[]'); } catch {}
-
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center px-4"
       style={{ background: 'rgba(0,0,0,0.7)', backdropFilter: 'blur(8px)' }} onClick={onClose}>
@@ -104,7 +99,6 @@ const UserProfileModal = ({ userId, onClose }) => {
           <button onClick={onClose} style={{ color: 'var(--muted)' }}><X size={16} /></button>
         </div>
         <div className="flex items-center gap-4 mb-4">
-          {/* Foto profil besar */}
           <div className="w-16 h-16 rounded-2xl overflow-hidden flex-shrink-0" style={{ background: levelData.gradient }}>
             {profile.avatarIsFile && profile.avatar
               ? <img src={profile.avatar} className="w-full h-full object-cover" alt="" />
@@ -124,7 +118,7 @@ const UserProfileModal = ({ userId, onClose }) => {
         <div className="grid grid-cols-3 gap-2 mb-4">
           {[
             { label: 'Total XP', value: (profile.xp || 0).toLocaleString(), color: '#7c6dfa' },
-            { label: 'My List', value: (() => { try { return JSON.parse(localStorage.getItem(`animeplay_bookmarks_${userId}`) || '[]').length; } catch { return 0; } })(), color: '#fa6d9a' },
+            { label: 'My List', value: bookmarks.length, color: '#fa6d9a' },
             { label: 'Ditonton', value: history.length, color: '#fac96d' },
           ].map(s => (
             <div key={s.label} className="p-2 rounded-xl text-center" style={{ background: 'var(--card)' }}>
@@ -163,12 +157,10 @@ const CommentItem = ({ c, user, allComments, onLike, onReply, depth = 0 }) => {
   const [showProfile, setShowProfile] = useState(false);
   const replies = allComments.filter(r => r.parentId === c.id);
   const avatarUser = { avatarFile: c.avatarFile || null, avatar: c.avatar || null, avatarIsFile: !!c.avatarFile, name: c.name, role: c.role };
-
   return (
     <>
       {showProfile && c.userId && <UserProfileModal userId={c.userId} onClose={() => setShowProfile(false)} />}
       <div className={`flex gap-2.5 ${depth > 0 ? 'ml-8 mt-2' : 'mt-0'}`}>
-        {/* Avatar + klik untuk lihat profil */}
         <button onClick={() => c.userId && setShowProfile(true)} className="flex-shrink-0 mt-0.5">
           <Avatar user={avatarUser} size={7} />
         </button>
@@ -205,7 +197,7 @@ const StreamingAnimeCommentsSection = ({ episodeUrl }) => {
   const navigate = useNavigate();
   const user = getUser();
   const episodeKey = episodeUrl || 'default';
-  const dbActive = isSupabaseConfigured();
+  const dbActive = isFirebaseConfigured();
 
   const [comments, setComments] = useState(() => loadLocal(episodeKey));
   const [newComment, setNewComment] = useState('');
@@ -214,12 +206,11 @@ const StreamingAnimeCommentsSection = ({ episodeUrl }) => {
   const [isOnline, setIsOnline] = useState(false);
   const [sending, setSending] = useState(false);
 
-  // Sync dari Supabase saat mount + polling real-time
   useEffect(() => {
     if (!dbActive) return;
     let stop = null;
     (async () => {
-      const remote = await fetchCommentsFromSupabase(episodeKey);
+      const remote = await fetchCommentsFromFirebase(episodeKey);
       if (remote !== null) { setComments(remote); setIsOnline(true); saveLocal(episodeKey, remote); }
       stop = pollComments(episodeKey, (updated) => { setComments(updated); saveLocal(episodeKey, updated); setIsOnline(true); }, 8000);
     })();
@@ -250,7 +241,7 @@ const StreamingAnimeCommentsSection = ({ episodeUrl }) => {
     const updated = [comment, ...comments];
     setComments(updated); saveLocal(episodeKey, updated);
     setNewComment(''); setReplyTo(null);
-    if (dbActive) { const ok = await saveCommentToSupabase(episodeKey, comment); if (!ok) setIsOnline(false); }
+    if (dbActive) { const ok = await saveCommentToFirebase(episodeKey, comment); if (!ok) setIsOnline(false); }
     setSending(false);
   };
 
@@ -262,10 +253,16 @@ const StreamingAnimeCommentsSection = ({ episodeUrl }) => {
       return { ...c, likes: already ? c.likes - 1 : c.likes + 1, likedBy: already ? likedBy.filter(u => u !== user.id) : [...likedBy, user.id] };
     });
     setComments(updated); saveLocal(episodeKey, updated);
-    if (dbActive) { const uc = updated.find(c => c.id === id); await updateLikeInSupabase(id, uc); }
+    if (dbActive) { const uc = updated.find(c => c.id === id); await updateLikeInFirebase(episodeKey, id, uc); }
   };
 
-  const meAvatar = user ? { avatarFile: user.avatarIsFile ? user.avatar : null, avatar: !user.avatarIsFile ? user.avatar : null, avatarIsFile: user.avatarIsFile, name: user.username, role: user.role } : null;
+  const meAvatar = user ? {
+    avatarFile: user.avatarIsFile ? user.avatar : null,
+    avatar: !user.avatarIsFile ? user.avatar : null,
+    avatarIsFile: user.avatarIsFile,
+    name: user.username,
+    role: user.role,
+  } : null;
 
   return (
     <div className="mb-8 mt-4">
@@ -292,7 +289,7 @@ const StreamingAnimeCommentsSection = ({ episodeUrl }) => {
         )}
       </div>
 
-      {/* Input */}
+      {/* Input komentar */}
       {user ? (
         <div className="mb-5">
           {replyTo && (
@@ -303,7 +300,6 @@ const StreamingAnimeCommentsSection = ({ episodeUrl }) => {
             </div>
           )}
           <div className="flex items-center gap-2.5">
-            {/* Foto profil user yang sedang login */}
             <Avatar user={meAvatar} size={8} />
             <div className="flex-1 flex items-center gap-2 bg-dark-card border border-white/8 rounded-xl px-3 py-2 focus-within:border-white/15 transition-colors">
               <input value={newComment} onChange={e => setNewComment(e.target.value)}
@@ -318,7 +314,7 @@ const StreamingAnimeCommentsSection = ({ episodeUrl }) => {
           </div>
           {!dbActive && (
             <p className="text-[10px] mt-1.5 ml-10" style={{ color: 'var(--muted)' }}>
-              ⚠️ Mode lokal — setup Supabase di <code>src/services/supabase.js</code> agar sinkron antar HP
+              ⚠️ Mode lokal — isi FIREBASE_DB_URL di <code>src/services/firebase.js</code> agar sinkron antar HP
             </p>
           )}
         </div>
