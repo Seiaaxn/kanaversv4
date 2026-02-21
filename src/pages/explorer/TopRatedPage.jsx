@@ -14,7 +14,7 @@ const TopRatedPage = ({ onAnimeSelect }) => {
             try {
                 const res = await axios.get(`${API_BASE}/latest`);
                 // Mock sorting by rating (since API doesn't have explicit rating)
-                const sorted = res.data.data?.sort(() => 0.5 - Math.random()) || [];
+                const sorted = (Array.isArray(res.data) ? res.data : Array.isArray(res.data?.data) ? res.data.data : []).sort(() => 0.5 - Math.random());
                 setTopRated(sorted);
             } catch (error) {
                 console.error('Error:', error);
