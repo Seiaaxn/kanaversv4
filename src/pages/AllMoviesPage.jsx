@@ -112,4 +112,4 @@ const AllMoviesPage = () => {
 };
 
 export default AllMoviesPage;
-                    
+                                                  
