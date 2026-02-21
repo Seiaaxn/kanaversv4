@@ -3,6 +3,30 @@
 const AUTH_KEY = 'animeplay_auth';
 const USERS_KEY = 'animeplay_users';
 
+// ── Helper: sync stats user ke Firebase setelah perubahan ──────────────────
+// Import dinamis agar tidak circular dependency
+const syncStats = async (user) => {
+  try {
+    const { syncUserStatsToFirebase, isFirebaseConfigured } = await import('./firebaseSync.js');
+    if (!isFirebaseConfigured()) return;
+    const histKey = `animeplay_history_${user.id}`;
+    const bkKey = `animeplay_bookmarks_${user.id}`;
+    const history = JSON.parse(localStorage.getItem(histKey) || '[]');
+    const bookmarks = JSON.parse(localStorage.getItem(bkKey) || '[]');
+    await syncUserStatsToFirebase(user.id, {
+      xp: user.xp || 0,
+      bookmarkCount: bookmarks.length,
+      historyCount: history.length,
+      recentHistory: history.slice(0, 5),
+      username: user.username,
+      role: user.role || 'user',
+      avatar: user.avatar || null,
+      avatarIsFile: user.avatarIsFile || false,
+      customBadge: user.customBadge || null,
+    });
+  } catch {}
+};
+
 // Tier names for higher levels
 const TIER_NAMES = [
   'Bronze','Silver','Gold','Platinum','Diamond','Obsidian',
@@ -89,6 +113,9 @@ export const updateUser = (updates) => {
     const users=getStoredUsers();
     const idx=users.findIndex(u=>u.id===user.id);
     if(idx>=0){users[idx]={...users[idx],...updates};localStorage.setItem(USERS_KEY,JSON.stringify(users));}
+    // Sync ke Firebase jika ada perubahan profil (avatar, username, role, xp)
+    const profileFields=['avatar','avatarIsFile','username','role','xp','customBadge'];
+    if(profileFields.some(k=>k in updates)) syncStats(updated);
     return updated;
   }catch{return null;}
 };
@@ -111,7 +138,8 @@ export const addXP = (amount,reason='') => {
   const newXP=(user.xp||0)+amount;
   const oldLevel=getLevelInfo(user.xp||0).current.level;
   const newLevel=getLevelInfo(newXP).current.level;
-  updateUser({xp:newXP});
+  const updated=updateUser({xp:newXP});
+  if(updated) syncStats(updated);
   return {newXP,amount,reason,leveledUp:newLevel>oldLevel,newLevel};
 };
 
@@ -129,6 +157,7 @@ export const addToUserHistory=(anime,episode)=>{
     if(existingIdx>=0){history[existingIdx]={...history[existingIdx],...item};const u=history.splice(existingIdx,1)[0];history.unshift(u);}
     else history.unshift(item);
     localStorage.setItem(key,JSON.stringify(history.slice(0,100)));
+    const u=getUser();if(u)syncStats(u);
   }catch{}
 };
 
@@ -144,7 +173,9 @@ export const toggleUserBookmark=(item)=>{
     const key=getBookmarkKey();const bookmarks=getUserBookmarks();
     const exists=bookmarks.some(b=>b.url===item.url);
     const updated=exists?bookmarks.filter(b=>b.url!==item.url):[...bookmarks,{...item,addedAt:new Date().toISOString()}];
-    localStorage.setItem(key,JSON.stringify(updated));return !exists;
+    localStorage.setItem(key,JSON.stringify(updated));
+    const u=getUser();if(u)syncStats(u);
+    return !exists;
   }catch{return false;}
 };
 export const isBookmarked=(url)=>getUserBookmarks().some(b=>b.url===url);
@@ -168,4 +199,5 @@ export const initAdminAccount=()=>{
     localStorage.setItem(USERS_KEY,JSON.stringify([adminUser,...users]));
   }
 };
+
     
