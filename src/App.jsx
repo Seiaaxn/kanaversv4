@@ -14,6 +14,7 @@ import Search from './pages/Search';
 import AllAnimePage from './pages/AllAnimePage';
 import AllDonghuaPage from './pages/AllDonghuaPage';
 import AllMoviesPage from './pages/AllMoviesPage';
+import LeaderboardPage from './pages/LeaderboardPage';
 
 function App() {
   return (
@@ -34,6 +35,7 @@ function App() {
           <Route path="/all-anime" element={<AllAnimePage />} />
           <Route path="/all-donghua" element={<AllDonghuaPage />} />
           <Route path="/all-movies" element={<AllMoviesPage />} />
+          <Route path="/leaderboard" element={<LeaderboardPage />} />
         </Route>
       </Routes>
     </>
@@ -41,3 +43,4 @@ function App() {
 }
 
 export default App;
+      
