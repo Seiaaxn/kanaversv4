@@ -21,8 +21,12 @@ const AllMoviesPage = () => {
       const res = await axios.get(`${API_BASE}/anime/movies?page=${pageNum}`).catch(()=>
         axios.get(`${API_BASE}/anime/genre/movie?page=${pageNum}`)
       );
-      const data = res.data?.data || res.data || [];
-      const list = Array.isArray(data) ? data : [];
+      const raw = res.data;
+      const list = Array.isArray(raw) ? raw
+        : Array.isArray(raw?.data) ? raw.data
+        : Array.isArray(raw?.anime) ? raw.anime
+        : Array.isArray(raw?.movies) ? raw.movies
+        : [];
       if (pageNum === 1) setItems(list); else setItems(prev => [...prev, ...list]);
       setHasMore(list.length >= 10);
     } catch (e) {
@@ -108,3 +112,4 @@ const AllMoviesPage = () => {
 };
 
 export default AllMoviesPage;
+                    
