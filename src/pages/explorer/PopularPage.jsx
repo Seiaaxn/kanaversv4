@@ -84,3 +84,4 @@ const PopularPage = ({ onAnimeSelect }) => {
 };
 
 export default PopularPage;
+                    
