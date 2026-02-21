@@ -11,7 +11,6 @@ import ContentSection from '../components/home/ContentSection';
 const HomePage = () => {
   const navigate = useNavigate();
   const [headerScrolled, setHeaderScrolled] = useState(false);
-
   const { animeData, donghuaData, loading } = useHomeData();
 
   useEffect(() => {
@@ -20,8 +19,18 @@ const HomePage = () => {
     return () => window.removeEventListener('scroll', handleScroll);
   }, []);
 
+  // Deteksi kategori item dengan andal
+  const getCategory = (item) => {
+    if (item._category) return item._category;
+    if (item.source === 'anichin') return 'donghua';
+    if (item.source === 'samehadaku') return 'anime';
+    const url = item.url || item.link || '';
+    if (url.includes('anichin') || url.includes('kuramanime') || url.includes('nontondonghua')) return 'donghua';
+    return 'anime';
+  };
+
   const handleItemSelect = (item) => {
-    const category = item.source === 'samehadaku' || item.type === 'Anime' ? 'anime' : 'donghua';
+    const category = getCategory(item);
     let itemUrl = item.url || item.link;
     if (!itemUrl) return;
     itemUrl = itemUrl.replace(/\/+$/, '');
@@ -32,7 +41,7 @@ const HomePage = () => {
     if (loading) return [];
     const combined = [
       ...(Array.isArray(animeData) ? animeData.slice(0, 3) : []),
-      ...(Array.isArray(donghuaData) ? donghuaData.slice(0, 2) : [])
+      ...(Array.isArray(donghuaData) ? donghuaData.slice(0, 2) : []),
     ];
     for (let i = combined.length - 1; i > 0; i--) {
       const j = Math.floor(Math.random() * (i + 1));
@@ -44,9 +53,7 @@ const HomePage = () => {
   return (
     <div className="min-h-screen bg-dark-bg">
       <Header scrolled={headerScrolled} />
-
-      <div className="pt-13" style={{paddingTop: '52px'}}>
-        {/* Hero */}
+      <div style={{ paddingTop: '52px' }}>
         <HeroSlider
           items={getHeroItems()}
           onAnimeSelect={handleItemSelect}
@@ -54,7 +61,6 @@ const HomePage = () => {
           loading={loading}
         />
 
-        {/* Anime Section */}
         <ContentSection
           title="Latest Anime"
           label="Anime"
@@ -65,10 +71,8 @@ const HomePage = () => {
           seeAllPath="/all-anime"
         />
 
-        {/* Divider */}
         <div className="mx-4 border-t border-white/5 my-1" />
 
-        {/* Donghua Section */}
         <ContentSection
           title="Latest Donghua"
           label="Donghua"
@@ -79,18 +83,10 @@ const HomePage = () => {
           seeAllPath="/all-donghua"
         />
 
-        {/* Divider */}
         <div className="mx-4 border-t border-white/5 my-1" />
-
-        {/* Popular Donghua */}
         <PopularTodaySection />
-
-        {/* Divider */}
         <div className="mx-4 border-t border-white/5 my-1" />
-
-        {/* Anime Movies */}
         <AnimeMovie />
-
         <div className="h-6" />
       </div>
     </div>
@@ -98,3 +94,4 @@ const HomePage = () => {
 };
 
 export default HomePage;
+        
