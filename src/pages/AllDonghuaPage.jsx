@@ -18,8 +18,12 @@ const AllDonghuaPage = () => {
     try {
       if (pageNum === 1) setLoading(true); else setLoadingMore(true);
       const res = await axios.get(`${API_BASE}/donghua/latest?page=${pageNum}`);
-      const data = res.data?.data || res.data || [];
-      const list = Array.isArray(data) ? data : [];
+      const raw = res.data;
+      const list = Array.isArray(raw) ? raw
+        : Array.isArray(raw?.data) ? raw.data
+        : Array.isArray(raw?.anime) ? raw.anime
+        : Array.isArray(raw?.movies) ? raw.movies
+        : [];
       if (pageNum === 1) setItems(list); else setItems(prev => [...prev, ...list]);
       setHasMore(list.length >= 12);
     } catch (e) { console.error(e); }
@@ -93,3 +97,4 @@ const AllDonghuaPage = () => {
 };
 
 export default AllDonghuaPage;
+            
