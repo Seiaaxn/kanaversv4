@@ -104,4 +104,45 @@ export const pollComments = (episodeKey, callback, intervalMs = 8000) => {
   const id = setInterval(poll, intervalMs);
   return () => clearInterval(id);
 };
-  
+
+// ── Simpan stats user ke Firebase ─────────────────────────────────────────
+// Dipanggil setiap kali XP / bookmark / history berubah
+export const syncUserStatsToFirebase = async (userId, stats) => {
+  if (!isFirebaseConfigured() || !userId) return false;
+  try {
+    const res = await fetch(`${FIREBASE_DB_URL}/users/${userId}.json`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        xp: stats.xp || 0,
+        bookmarkCount: stats.bookmarkCount || 0,
+        historyCount: stats.historyCount || 0,
+        recentHistory: (stats.recentHistory || []).slice(0, 5),
+        username: stats.username || '',
+        role: stats.role || 'user',
+        avatar: stats.avatar || null,
+        avatarIsFile: stats.avatarIsFile || false,
+        customBadge: stats.customBadge || null,
+        updatedAt: new Date().toISOString(),
+      }),
+    });
+    return res.ok;
+  } catch (e) {
+    console.warn('Firebase syncUserStats error:', e);
+    return false;
+  }
+};
+
+// ── Ambil stats user dari Firebase (untuk lihat profil orang lain) ─────────
+export const fetchUserStatsFromFirebase = async (userId) => {
+  if (!isFirebaseConfigured() || !userId) return null;
+  try {
+    const res = await fetch(`${FIREBASE_DB_URL}/users/${userId}.json`);
+    if (!res.ok) return null;
+    return await res.json();
+  } catch (e) {
+    console.warn('Firebase fetchUserStats error:', e);
+    return null;
+  }
+};
+        
