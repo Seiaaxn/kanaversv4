@@ -194,4 +194,5 @@ const GenrePage = () => {
 };
 
 export default GenrePage;
+
       
