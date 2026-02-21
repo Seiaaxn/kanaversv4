@@ -48,8 +48,13 @@ export const useHomeData = () => {
         ]);
 
         if (animeRes.status === 'fulfilled') {
-          const animeData = animeRes.value.data || [];
-          setAnimeData(Array.isArray(animeData) ? animeData : []);
+          // API bisa return array langsung atau { data: [...] }
+          const raw = animeRes.value.data;
+          const animeList = Array.isArray(raw) ? raw 
+            : Array.isArray(raw?.data) ? raw.data 
+            : Array.isArray(raw?.anime) ? raw.anime 
+            : [];
+          setAnimeData(animeList);
         }
 
         if (donghuaRes.status === 'fulfilled') {
@@ -136,4 +141,5 @@ export const useHomeData = () => {
     getCategoryTitle
   };
 };
-                                      
+
+  
