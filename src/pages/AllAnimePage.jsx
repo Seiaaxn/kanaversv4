@@ -18,8 +18,11 @@ const AllAnimePage = () => {
     try {
       if (pageNum === 1) setLoading(true); else setLoadingMore(true);
       const res = await axios.get(`${API_BASE}/anime/latest?page=${pageNum}`);
-      const data = res.data?.data || res.data || [];
-      const list = Array.isArray(data) ? data : [];
+      const raw = res.data;
+      const list = Array.isArray(raw) ? raw
+        : Array.isArray(raw?.data) ? raw.data
+        : Array.isArray(raw?.anime) ? raw.anime
+        : [];
       if (reset) setItems(list); else setItems(prev => [...prev, ...list]);
       setHasMore(list.length >= 12);
     } catch (e) {
@@ -103,3 +106,4 @@ const AllAnimePage = () => {
 };
 
 export default AllAnimePage;
+    
