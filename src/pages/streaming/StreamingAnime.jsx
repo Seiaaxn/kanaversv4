@@ -1,6 +1,18 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import axios from 'axios';
+
+import { addXP, getUser } from '../../utils/userSystem';
+import { syncUserNow } from '../../services/firebase';
+
+const showXPToast = (amount, extra = '') => {
+    const toast = document.createElement('div');
+    toast.className = 'xp-toast';
+    toast.textContent = `⚡ +${amount} XP${extra}`;
+    document.body.appendChild(toast);
+    setTimeout(() => toast.classList.add('show'), 100);
+    setTimeout(() => { toast.classList.remove('show'); setTimeout(() => toast.remove(), 300); }, 2800);
+};
 
 import {
     StreamingAnimeNavbar,
@@ -28,8 +40,34 @@ const StreamingAnime = () => {
     const [isIframeLoading, setIsIframeLoading] = useState(false);
 
     const iframeRef = useRef(null);
+    const xpTimerRef = useRef(null);
+    const watchStartRef = useRef(null);
+
+    // XP tiap 20 menit menonton
+    const startWatchTimer = useCallback(() => {
+        if (!getUser()) return;
+        watchStartRef.current = Date.now();
+        if (xpTimerRef.current) clearInterval(xpTimerRef.current);
+        xpTimerRef.current = setInterval(() => {
+            const result = addXP(100, 'Menonton 20 menit');
+            if (result) {
+                showXPToast(100, result.leveledUp ? ` 🎉 Level ${result.newLevel}!` : ' (nonton 20 menit)');
+                syncUserNow();
+            }
+        }, 20 * 60 * 1000); // 20 menit
+    }, []);
+
+    const stopWatchTimer = useCallback(() => {
+        if (xpTimerRef.current) { clearInterval(xpTimerRef.current); xpTimerRef.current = null; }
+    }, []);
+
+    // Start timer saat iframe selesai load, stop saat ganti episode/server
+    useEffect(() => {
+        return () => stopWatchTimer(); // cleanup saat unmount
+    }, [stopWatchTimer]);
 
     useEffect(() => {
+
         const fetchEpisodeDetail = async () => {
             if (!episodeUrl) {
                 setError('No episode URL provided');
@@ -61,9 +99,9 @@ const StreamingAnime = () => {
         fetchEpisodeDetail();
     }, [episodeUrl]);
 
-    const handleBack = () => navigate(-1);
-    const handleEpisodeClick = (ep) => navigate(`/anime/watch?url=${encodeURIComponent(ep.url)}`);
-    const handleServerChange = (server) => { setSelectedServer(server); setIsIframeLoading(true); };
+    const handleBack = () => { stopWatchTimer(); navigate(-1); };
+    const handleEpisodeClick = (ep) => { stopWatchTimer(); navigate(`/anime/watch?url=${encodeURIComponent(ep.url)}`); };
+    const handleServerChange = (server) => { stopWatchTimer(); setSelectedServer(server); setIsIframeLoading(true); };
     const handleGoHome = () => navigate('/');
 
     if (loading) {
@@ -104,7 +142,7 @@ const StreamingAnime = () => {
                     ref={iframeRef}
                     selectedServer={selectedServer}
                     isLoading={isIframeLoading}
-                    onLoad={() => setIsIframeLoading(false)}
+                    onLoad={() => { setIsIframeLoading(false); startWatchTimer(); }}
                     onError={() => { setIsIframeLoading(false); }}
                 />
             </div>
@@ -136,3 +174,4 @@ const StreamingAnime = () => {
 };
 
 export default StreamingAnime;
+        
