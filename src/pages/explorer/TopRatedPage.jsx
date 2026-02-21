@@ -99,3 +99,4 @@ const TopRatedPage = ({ onAnimeSelect }) => {
 };
 
 export default TopRatedPage;
+                                
